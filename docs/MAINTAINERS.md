@@ -18,7 +18,7 @@ JDK 17、Android SDK 35，執行 ./gradlew testDebugUnitTest assembleDebug。CI 
 
 ## 發布
 
-此工作流程不自動發布，避免把臨時 debug 簽章 APK 誤當正式更新。先確認官方 Secrets 已設定、CI 全綠，下載 artifact 並驗證版本、雜湊與 apksigner 簽章。建立對應 commit 的 GitHub Release，附 APK、SHA-256、更新說明及安裝教學。手動觸發 Build 並勾選 publish 才會嘗試發布，且必須具有正式簽章 Secrets。
+此工作流程不自動發布，避免把臨時 debug 簽章 APK 誤當正式更新。先確認官方 Secrets 已設定、CI 全綠，下載 artifact 並驗證版本、雜湊與 apksigner 簽章。建立對應 commit 的 GitHub Release，附 APK、SHA-256、更新說明及安裝教學。手動觸發 Build 並勾選 publish 才會嘗試發布，；首次 v0.4.14 可改用 distribution 內指定雜湊的既有官方 APK，後續新版仍需正式簽章 Secrets。
 
 ## 隱私與限制
 

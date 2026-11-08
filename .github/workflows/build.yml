@@ -91,8 +91,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test -n "$AUTOSTREAM_KEYSTORE_PATH"
           APK="app/build/outputs/apk/debug/${{ steps.ver.outputs.apk }}"
+          if [ -z "$AUTOSTREAM_KEYSTORE_PATH" ]; then
+            APK="distribution/${{ steps.ver.outputs.apk }}"
+            echo "20ed50c9c89f817b08abe4eca02adb3cde670b1cc28db924b58241cd59c4120c  $APK" | sha256sum --check
+          fi
           sha256sum "$APK" > SHA256SUMS
           cat > release-notes.md <<'NOTES'
           Experimental Android Auto side-load build. Park before watching or interacting.
