@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AutoStream</string>
+    <string name="fgs_channel_name">AutoStream 播放</string>
+    <string name="fgs_title">AutoStream 執行中</string>
+    <string name="fgs_text">車機畫面串流中</string>
+</resources>

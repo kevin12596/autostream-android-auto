@@ -1,0 +1,103 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish signed APK to GitHub Releases after tests
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Read version
+        id: ver
+        run: |
+          VN=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          VC=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
+          echo "name=$VN" >> "$GITHUB_OUTPUT"
+          echo "code=$VC" >> "$GITHUB_OUTPUT"
+          echo "apk=AutoStream-v${VN}-build${VC}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Test double-tap seek script
+        run: node scripts/test-double-tap-seek.cjs
+
+      - name: Test nested scroll routing
+        run: node scripts/test-nested-scroll.cjs
+
+      - name: Test wide layout in Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ix-layout-tools" --no-package-lock --no-save playwright@1.58.2
+          export NODE_PATH="$RUNNER_TEMP/ix-layout-tools/node_modules"
+          node "$RUNNER_TEMP/ix-layout-tools/node_modules/playwright/cli.js" install --with-deps chromium
+          node scripts/test-ix-layout.cjs
+
+      - name: Restore optional official signing key
+        env:
+          KEY_DATA: ${{ secrets.AUTOSTREAM_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.AUTOSTREAM_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AUTOSTREAM_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.AUTOSTREAM_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEY_DATA" ]; then
+            test -n "$STORE_PASS" && test -n "$KEY_ALIAS" && test -n "$KEY_PASS"
+            printf '%s' "$KEY_DATA" | base64 --decode > "$RUNNER_TEMP/autostream.p12"
+            chmod 600 "$RUNNER_TEMP/autostream.p12"
+            echo "AUTOSTREAM_KEYSTORE_PATH=$RUNNER_TEMP/autostream.p12" >> "$GITHUB_ENV"
+          fi
+
+      - name: Test and assemble debug APK
+        env:
+          AUTOSTREAM_STORE_PASSWORD: ${{ secrets.AUTOSTREAM_STORE_PASSWORD }}
+          AUTOSTREAM_KEY_ALIAS: ${{ secrets.AUTOSTREAM_KEY_ALIAS }}
+          AUTOSTREAM_KEY_PASSWORD: ${{ secrets.AUTOSTREAM_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+          ls -la app/build/outputs/apk/debug/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ver.outputs.apk }}
+          path: app/build/outputs/apk/debug/${{ steps.ver.outputs.apk }}
+          if-no-files-found: error
+
+
+      - name: Publish verified signed build
+        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -n "$AUTOSTREAM_KEYSTORE_PATH"
+          APK="app/build/outputs/apk/debug/${{ steps.ver.outputs.apk }}"
+          sha256sum "$APK" > SHA256SUMS
+          cat > release-notes.md <<'NOTES'
+          Experimental Android Auto side-load build. Park before watching or interacting.
+          Download the APK asset, not Source code. Install using Shizuku + InstallWithOptions with installer package com.android.vending, then enable Android Auto developer Unknown sources.
+          Full Traditional Chinese guide: https://github.com/kevin12596/autostream-android-auto/blob/main/docs/INSTALL.zh-TW.md
+          Preserves video aspect ratio; ultrawide displays can show black bars. Compatibility varies by phone, car and Android Auto version.
+          NOTES
+          gh release create "v${{ steps.ver.outputs.name }}" "$APK" SHA256SUMS --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "AutoStream v${{ steps.ver.outputs.name }} (build ${{ steps.ver.outputs.code }})" --notes-file release-notes.md

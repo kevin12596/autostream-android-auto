@@ -1,0 +1,8 @@
+<resources>
+    <item name="phone_search_query" type="id" />
+    <item name="phone_search_submit" type="id" />
+    <item name="phone_search_voice" type="id" />
+    <item name="phone_search_car" type="id" />
+    <item name="phone_search_web" type="id" />
+    <item name="phone_search_status" type="id" />
+</resources>
